@@ -13,4 +13,7 @@ python-socketio
 tqdm
 requests[socks]
 httpx[http2]
-
+asyncio
+bs4
+cryptography
+termcolor
