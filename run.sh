@@ -73,8 +73,8 @@ else
 fi
 
 # Step 5: Navigate to project directory
-if [ -d "$HOME/CVV-Checkers" ]; then
-    cd "$HOME/CVV-Checkers"
+if [ -d "$HOME/CVV-checkers" ]; then
+    cd "$HOME/CVV-checkers"
 else
     echo "Error: CVV-Checkers directory not found in HOME."
     echo "Place this script inside or above the CVV-Checkers folder."
@@ -93,10 +93,10 @@ fi
 
 # Step 7: Fix permissions
 echo "[7/8] Setting directory permissions..."
-chmod -R 755 "$HOME/CVV-Checkers"
+chmod -R 755 "$HOME/CVV-checkers"
 
 # Step 8: Run main script with auto-restart
-echo "[8/8] Launching CVV-Checkers..."
+echo "[8/8] Launching CVV-checkers..."
 echo ""
 echo "=========================================="
 echo "   Starting auth.py (auto-restart)"
@@ -105,7 +105,7 @@ echo "=========================================="
 echo ""
 
 while true; do
-    $PY "$HOME/CVV-Checkers/auth.py"
+    $PY "$HOME/CVV-checkers/auth.py"
     echo ""
     echo ">>> auth.py stopped. Restarting in 5 seconds..."
     sleep 5
