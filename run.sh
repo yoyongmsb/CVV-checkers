@@ -1,150 +1,145 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # ==========================================================
-# Universal Installer: Termux / Linux / macOS
-# Author : Kian Santang
-# GitHub : https://github.com/KianSantang777/CVV-Checkers
+# Universal Runner / Installer
+# Clean • Modern • Realtime • Termux-safe
+# Repo : https://github.com/KianSantang777/CVV-Checkers
 # ==========================================================
 
 set -e
 
-# -------------- COLOR CODES --------------
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# ---------------- UI COLORS ----------------
+CLR_RESET='\033[0m'
+CLR_DIM='\033[2m'
+CLR_OK='\033[0;32m'
+CLR_ERR='\033[0;31m'
 
-# -------------- LOGGING FUNCTIONS --------------
-log_info() {
-    echo -e "${YELLOW}[INFO]${NC} $1"
-}
+# ---------------- UI FUNCTIONS ----------------
+step() { printf "${CLR_DIM}• %s${CLR_RESET}\n" "$1"; }
+ok()   { printf "${CLR_OK}✓ %s${CLR_RESET}\n" "$1"; }
+fail() { printf "${CLR_ERR}✗ %s${CLR_RESET}\n" "$1"; exit 1; }
 
-log_success() {
-    echo -e "${GREEN}[OK]${NC} $1"
-}
+run() {
+    local msg="$1"; shift
+    printf "${CLR_DIM}• %s${CLR_RESET} " "$msg"
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-    exit 1
-}
-
-# -------------- SPINNER FUNCTION --------------
-spinner() {
+    "$@" >/dev/null 2>&1 &
     local pid=$!
-    local delay=0.1
-    local spinstr='|/-\'
-    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
-        local temp=${spinstr#?}
-        printf " [%c]  " "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
-        printf "\b\b\b\b\b\b"
+
+    local spin='|/-\'
+    local i=0
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r${CLR_DIM}• %s %c${CLR_RESET}" "$msg" "${spin:i++%4:1}"
+        sleep 0.1
     done
-    wait $pid
-    return $?
+
+    wait "$pid"
+    if [ $? -eq 0 ]; then
+        printf "\r${CLR_OK}✓ %s${CLR_RESET}\n" "$msg"
+    else
+        printf "\r${CLR_ERR}✗ %s${CLR_RESET}\n" "$msg"
+        exit 1
+    fi
 }
 
-# -------------- PLATFORM DETECTION --------------
-PLATFORM=""
-SUDO=""
-PYTHON_CMD=""
+# ---------------- PLATFORM ----------------
+PLATFORM="linux"
+SUDO="sudo"
 
 if [ -d "/data/data/com.termux" ]; then
     PLATFORM="termux"
     SUDO=""
-    log_info "Detected environment: Termux (Android)"
+    step "Environment: Termux"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
     PLATFORM="macos"
     SUDO=""
-    log_info "Detected environment: macOS"
+    step "Environment: macOS"
 else
-    PLATFORM="linux"
-    SUDO="sudo"
-    log_info "Detected environment: Linux"
+    step "Environment: Linux"
 fi
 
-# -------------- UPDATE SYSTEM --------------
-log_info "Updating system..."
-(
-    if [ "$PLATFORM" = "termux" ]; then
-        pkg update -y && pkg upgrade -y
-    elif [ "$PLATFORM" = "linux" ]; then
-        $SUDO apt update -y && $SUDO apt upgrade -y
-    fi
-) & spinner
-log_success "System updated."
-
-# -------------- STORAGE PERMISSION FOR TERMUX --------------
+# ---------------- UPDATE ----------------
 if [ "$PLATFORM" = "termux" ]; then
-    log_info "Requesting Termux storage permission..."
-    termux-setup-storage || log_error "Failed to request storage permission."
-    log_success "Storage permission granted."
+    run "Updating system" pkg update -y
+elif [ "$PLATFORM" = "linux" ]; then
+    run "Updating system" $SUDO apt update -y
 fi
 
-# -------------- INSTALL REQUIRED PACKAGES --------------
-log_info "Installing required packages..."
-(
-    if [ "$PLATFORM" = "termux" ]; then
-        pkg install -y python git nano
-    elif [ "$PLATFORM" = "linux" ]; then
-        $SUDO apt install -y python3 python3-pip git nano software-properties-common
-    elif [ "$PLATFORM" = "macos" ]; then
-        if ! command -v brew >/dev/null 2>&1; then
-            log_error "Homebrew not found. Please install Homebrew from https://brew.sh"
-        fi
-        brew install python git nano
-    fi
-) & spinner
-log_success "Packages installed."
+# ---------------- TERMUX STORAGE ----------------
+[ "$PLATFORM" = "termux" ] && run "Enabling storage access" termux-setup-storage
 
-# -------------- PYTHON VERSION CHECK --------------
-log_info "Detecting Python interpreter..."
-PYTHON_CMD=$(command -v python3.12 || command -v python3 || true)
-
-if [ -z "$PYTHON_CMD" ]; then
-    if [ "$PLATFORM" = "linux" ]; then
-        log_info "Installing Python 3.12..."
-        (
-            $SUDO add-apt-repository -y ppa:deadsnakes/ppa
-            $SUDO apt update -y
-            $SUDO apt install -y python3.12 python3.12-venv python3.12-distutils
-        ) & spinner
-        PYTHON_CMD=$(command -v python3.12)
-    else
-        log_error "No compatible Python found. Please install Python manually."
-    fi
+# ---------------- BASE PACKAGES ----------------
+if [ "$PLATFORM" = "termux" ]; then
+    run "Installing base tools" \
+        pkg install -y python clang libffi openssl nano curl wget unzip git
+elif [ "$PLATFORM" = "linux" ]; then
+    run "Installing base tools" \
+        $SUDO apt install -y python3 python3-pip nano curl wget unzip git
+elif [ "$PLATFORM" = "macos" ]; then
+    command -v brew >/dev/null || fail "Homebrew not installed"
+    run "Installing base tools" \
+        brew install python nano curl wget unzip git
 fi
 
-log_success "Using Python: $($PYTHON_CMD -V 2>&1)"
+# ---------------- PYTHON (TERMUX-SAFE) ----------------
+if [ "$PLATFORM" = "termux" ]; then
+    PYTHON=$(command -v python3.11 || command -v python3)
+else
+    PYTHON=$(command -v python3)
+fi
 
-# -------------- VALIDATE PROJECT DIRECTORY --------------
+[ -z "$PYTHON" ] && fail "Python not found"
+ok "Using $($PYTHON --version 2>&1)"
+
+# ---------------- PROJECT ----------------
 PROJECT_DIR="$HOME/CVV-Checkers"
+REPO_URL="https://github.com/KianSantang777/CVV-Checkers"
+ZIP_URL="$REPO_URL/archive/refs/heads/main.zip"
+TMP_ZIP="$HOME/.cvv_checkers.zip"
+
 if [ ! -d "$PROJECT_DIR" ]; then
-    log_error "Project directory not found: $PROJECT_DIR"
+    step "Project not found"
+
+    if command -v git >/dev/null; then
+        run "Cloning repository" git clone "$REPO_URL" "$PROJECT_DIR"
+    else
+        step "Git unavailable, using zip"
+
+        if command -v curl >/dev/null; then
+            run "Downloading source" curl -L "$ZIP_URL" -o "$TMP_ZIP"
+        elif command -v wget >/dev/null; then
+            run "Downloading source" wget "$ZIP_URL" -O "$TMP_ZIP"
+        else
+            fail "curl / wget required"
+        fi
+
+        run "Extracting source" unzip -q "$TMP_ZIP" -d "$HOME"
+        mv "$HOME/CVV-Checkers-main" "$PROJECT_DIR" || fail "Move failed"
+        rm -f "$TMP_ZIP"
+    fi
+
+    ok "Project ready"
+else
+    ok "Project directory exists"
 fi
-cd "$PROJECT_DIR"
 
-# -------------- INSTALL PYTHON DEPENDENCIES --------------
-if [ ! -f "requirements.txt" ]; then
-    log_error "requirements.txt not found in $PROJECT_DIR"
-fi
+cd "$PROJECT_DIR" || fail "Cannot enter project directory"
 
-log_info "Installing Python dependencies..."
-(
-    $PYTHON_CMD -m pip install --upgrade pip
-    $PYTHON_CMD -m pip install -r requirements.txt
-) & spinner
-log_success "Dependencies installed."
+# ---------------- PYTHON DEPS ----------------
+[ ! -f requirements.txt ] && fail "requirements.txt missing"
 
-# -------------- SET PERMISSIONS --------------
-log_info "Setting directory permissions..."
+run "Upgrading pip" $PYTHON -m pip install -U pip setuptools wheel
+run "Installing dependencies" $PYTHON -m pip install -r requirements.txt
+
+# ---------------- PERMISSIONS ----------------
 chmod -R 755 "$PROJECT_DIR"
-log_success "Permissions set."
+ok "Permissions set"
 
-# -------------- RUN APPLICATION IN LOOP --------------
-log_info "Launching auth.py (auto-restart enabled)"
+# ---------------- RUN ----------------
+printf "\n${CLR_DIM}→ Launching auth.py (auto-restart enabled)${CLR_RESET}\n"
+
 while true; do
-    $PYTHON_CMD "$PROJECT_DIR/auth.py"
-    log_info "auth.py stopped. Restarting in 5 seconds..."
+    $PYTHON auth.py
+    printf "${CLR_DIM}→ auth.py stopped, restarting in 5s${CLR_RESET}\n"
     sleep 5
 done
