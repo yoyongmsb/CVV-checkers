@@ -1,141 +1,112 @@
-#!/usr/bin/env bash
-
+#!/bin/bash
 # ==========================================================
-# Universal Auto Installer & Runner
-# Termux / Linux / macOS
-# Auto install OS deps + pip deps → run auth.py
+# CVV-Checkers Universal Installer (Termux / Linux / Ubuntu)
+# Author: Kian Santang
+# GitHub: https://github.com/KianSantang777/CVV-Checkers
 # ==========================================================
 
 set -e
 
-# ---------------- UI COLORS ----------------
-CLR_RESET='\033[0m'
-CLR_DIM='\033[2m'
-CLR_OK='\033[0;32m'
-CLR_ERR='\033[0;31m'
+clear
+echo ""
+echo "=========================================="
+echo "       CVV-Checkers Auto Installer"
+echo "=========================================="
+echo ""
 
-# ---------------- UI FUNCTIONS ----------------
-step() { printf "${CLR_DIM}• %s${CLR_RESET}\n" "$1"; }
-ok()   { printf "${CLR_OK}✓ %s${CLR_RESET}\n" "$1"; }
-fail() { printf "${CLR_ERR}✗ %s${CLR_RESET}\n" "$1"; exit 1; }
-
-run() {
-    local msg="$1"; shift
-    printf "${CLR_DIM}• %s${CLR_RESET} " "$msg"
-
-    "$@" >/dev/null 2>&1 &
-    local pid=$!
-
-    local s='|/-\'
-    local i=0
-    while kill -0 "$pid" 2>/dev/null; do
-        printf "\r${CLR_DIM}• %s %c${CLR_RESET}" "$msg" "${s:i++%4:1}"
-        sleep 0.1
-    done
-
-    wait "$pid"
-    if [ $? -eq 0 ]; then
-        printf "\r${CLR_OK}✓ %s${CLR_RESET}\n" "$msg"
-    else
-        printf "\r${CLR_ERR}✗ %s${CLR_RESET}\n" "$msg"
-        exit 1
-    fi
-}
-
-# ---------------- PLATFORM DETECT ----------------
-PLATFORM="linux"
-SUDO="sudo"
-
+# Detect platform
 if [ -d "/data/data/com.termux" ]; then
     PLATFORM="termux"
     SUDO=""
-    step "Environment: Termux"
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    PLATFORM="macos"
-    SUDO=""
-    step "Environment: macOS"
+    echo "Detected environment: Termux (Android)"
 else
-    step "Environment: Linux"
+    PLATFORM="linux"
+    SUDO="sudo"
+    echo "Detected environment: Linux / Ubuntu"
 fi
 
-# ---------------- UPDATE SYSTEM ----------------
+# Step 1: Update & Upgrade
+echo "[1/8] Updating and upgrading system..."
 if [ "$PLATFORM" = "termux" ]; then
-    run "Updating system" pkg update -y
-elif [ "$PLATFORM" = "linux" ]; then
-    run "Updating system" $SUDO apt update -y
-fi
-
-# ---------------- TERMUX STORAGE ----------------
-[ "$PLATFORM" = "termux" ] && run "Enabling storage access" termux-setup-storage
-
-# ---------------- INSTALL OS PACKAGES ----------------
-if [ "$PLATFORM" = "termux" ]; then
-    run "Installing OS packages" \
-        pkg install -y git nano curl wget unzip clang libffi openssl python
-elif [ "$PLATFORM" = "linux" ]; then
-    run "Installing OS packages" \
-        $SUDO apt install -y git nano curl wget unzip python3 python3-pip
-elif [ "$PLATFORM" = "macos" ]; then
-    command -v brew >/dev/null || fail "Install Homebrew first"
-    run "Installing OS packages" \
-        brew install git nano curl wget unzip python
-fi
-
-# ---------------- PYTHON ----------------
-if [ "$PLATFORM" = "termux" ]; then
-    PYTHON=$(command -v python3.11 || command -v python3)
+    pkg update -y && pkg upgrade -y
 else
-    PYTHON=$(command -v python3)
+    $SUDO apt update -y && $SUDO apt upgrade -y
 fi
 
-[ -z "$PYTHON" ] && fail "Python not found"
-ok "Using $($PYTHON --version 2>&1)"
+# Step 2: Request storage permission (Termux only)
+if [ "$PLATFORM" = "termux" ]; then
+    echo "[2/8] Requesting storage permission..."
+    termux-setup-storage
+fi
 
-# ---------------- PROJECT SETUP ----------------
-PROJECT_DIR="$HOME/CVV-Checkers"
-REPO_URL="https://github.com/KianSantang777/CVV-Checkers"
-ZIP_URL="$REPO_URL/archive/refs/heads/main.zip"
-TMP_ZIP="$HOME/.cvv_checkers.zip"
+# Step 3: Install essential packages
+echo "[3/8] Installing required packages..."
+if [ "$PLATFORM" = "termux" ]; then
+    pkg install python git nano -y
+else
+    $SUDO apt install -y python3 python3-pip git nano software-properties-common
+fi
 
-if [ ! -d "$PROJECT_DIR" ]; then
-    step "Project not found"
+# Step 4: Ensure Python 3.12.x (Linux only)
+echo "[4/8] Checking Python version..."
+PY_VER=$(python3 -V 2>&1)
 
-    if command -v git >/dev/null; then
-        run "Cloning repository" git clone "$REPO_URL" "$PROJECT_DIR"
+if echo "$PY_VER" | grep -q "3.12"; then
+    echo "Python version OK: $PY_VER"
+else
+    echo "Python 3.12.x not found."
+    if [ "$PLATFORM" = "linux" ]; then
+        echo "Installing Python 3.12..."
+        $SUDO add-apt-repository -y ppa:deadsnakes/ppa
+        $SUDO apt update -y
+        $SUDO apt install -y python3.12 python3.12-venv python3.12-distutils
     else
-        step "Git missing → using zip"
-
-        if command -v curl >/dev/null; then
-            run "Downloading source" curl -L "$ZIP_URL" -o "$TMP_ZIP"
-        elif command -v wget >/dev/null; then
-            run "Downloading source" wget "$ZIP_URL" -O "$TMP_ZIP"
-        else
-            fail "curl / wget required"
-        fi
-
-        run "Extracting source" unzip -q "$TMP_ZIP" -d "$HOME"
-        mv "$HOME/CVV-Checkers-main" "$PROJECT_DIR"
-        rm -f "$TMP_ZIP"
+        echo "Warning: Termux uses default Python version."
     fi
-
-    ok "Project ready"
-else
-    ok "Project directory exists"
 fi
 
-cd "$PROJECT_DIR" || fail "Cannot enter project directory"
+# Pick python executable
+if command -v python3.12 >/dev/null 2>&1; then
+    PY="python3.12"
+else
+    PY="python3"
+fi
 
-# ---------------- PIP SETUP ----------------
-run "Upgrading pip tools" $PYTHON -m pip install -U pip setuptools wheel
+# Step 5: Navigate to project directory
+if [ -d "$HOME/CVV-Checkers" ]; then
+    cd "$HOME/CVV-Checkers"
+else
+    echo "Error: CVV-Checkers directory not found in HOME."
+    echo "Place this script inside or above the CVV-Checkers folder."
+    exit 1
+fi
 
-[ ! -f requirements.txt ] && fail "requirements.txt missing"
+# Step 6: Install Python requirements
+echo "[6/8] Installing Python dependencies from stuff/requirements.txt..."
+if [ -f "stuff/requirements.txt" ]; then
+    $PY -m pip install --upgrade pip
+    $PY -m pip install -r requirements.txt
+else
+    echo "Error: requirements.txt not found!"
+    exit 1
+fi
 
-run "Installing Python requirements" $PYTHON -m pip install -r requirements.txt
+# Step 7: Fix permissions
+echo "[7/8] Setting directory permissions..."
+chmod -R 755 "$HOME/CVV-Checkers"
 
-# ---------------- PERMISSIONS ----------------
-chmod -R 755 "$PROJECT_DIR"
-ok "Permissions set"
+# Step 8: Run main script with auto-restart
+echo "[8/8] Launching CVV-Checkers..."
+echo ""
+echo "=========================================="
+echo "   Starting auth.py (auto-restart)"
+echo "   Press CTRL + C to stop manually."
+echo "=========================================="
+echo ""
 
-# ---------------- RUN APP ----------------
-printf "\n${CLR_DIM}→ Running auth.py${CLR_RESET}\n\n"
-exec $PYTHON auth.py
+while true; do
+    $PY "$HOME/CVV-Checkers/auth.py"
+    echo ""
+    echo ">>> auth.py stopped. Restarting in 5 seconds..."
+    sleep 5
+done
