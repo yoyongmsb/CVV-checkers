@@ -7,106 +7,160 @@
 
 set -e
 
-clear
-echo ""
-echo "=========================================="
-echo "       CVV-Checkers Auto Installer"
-echo "=========================================="
-echo ""
+# -----------------------------
+# UI Elements (Spinner + Colors)
+# -----------------------------
 
-# Detect platform
+spin() {
+    local pid=$!
+    local delay=0.1
+    local spinstr='|/-\'
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+        local temp=${spinstr#?}
+        printf " [%c]  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
+
+print_header() {
+    clear
+    echo ""
+    echo "==============================================="
+    echo "          CVV-CHECKERS AUTO INSTALLER          "
+    echo "==============================================="
+    echo ""
+}
+
+print_step() {
+    echo ""
+    echo "───────────────────────────────────────────────"
+    echo "▶ Step $1: $2"
+    echo "───────────────────────────────────────────────"
+}
+
+success() {
+    echo -e "\e[32m✔ Success:\e[0m $1"
+}
+
+error_exit() {
+    echo -e "\n\e[31m✖ Error:\e[0m $1"
+    exit 1
+}
+
+# -----------------------------
+# Platform Detection
+# -----------------------------
+
+print_header
 if [ -d "/data/data/com.termux" ]; then
     PLATFORM="termux"
+    PYTHON_CMD="python"
+    PKG_MGR="pkg"
     SUDO=""
-    echo "Detected environment: Termux (Android)"
+    echo "Environment detected: Termux (Android)"
 else
     PLATFORM="linux"
+    PYTHON_CMD="python3"
+    PKG_MGR="apt"
     SUDO="sudo"
-    echo "Detected environment: Linux / Ubuntu"
+    echo "Environment detected: Linux / Ubuntu / Debian"
 fi
 
-# Step 1: Update & Upgrade
-echo "[1/8] Updating and upgrading system..."
-if [ "$PLATFORM" = "termux" ]; then
-    pkg update -y && pkg upgrade -y
-else
-    $SUDO apt update -y && $SUDO apt upgrade -y
-fi
+sleep 1
 
-# Step 2: Request storage permission (Termux only)
-if [ "$PLATFORM" = "termux" ]; then
-    echo "[2/8] Requesting storage permission..."
-    termux-setup-storage
-fi
-
-# Step 3: Install essential packages
-echo "[3/8] Installing required packages..."
-if [ "$PLATFORM" = "termux" ]; then
-    pkg install python git nano -y
-else
-    $SUDO apt install -y python3 python3-pip git nano software-properties-common
-fi
-
-# Step 4: Ensure Python 3.12.x (Linux only)
-echo "[4/8] Checking Python version..."
-PY_VER=$(python3 -V 2>&1)
-
-if echo "$PY_VER" | grep -q "3.12"; then
-    echo "Python version OK: $PY_VER"
-else
-    echo "Python 3.12.x not found."
-    if [ "$PLATFORM" = "linux" ]; then
-        echo "Installing Python 3.12..."
-        $SUDO add-apt-repository -y ppa:deadsnakes/ppa
-        $SUDO apt update -y
-        $SUDO apt install -y python3.12 python3.12-venv python3.12-distutils
+# -----------------------------
+# Step 1: System Update
+# -----------------------------
+print_step 1 "Updating and upgrading the system..."
+(
+    if [ "$PLATFORM" = "termux" ]; then
+        pkg update -y && pkg upgrade -y
     else
-        echo "Warning: Termux uses default Python version."
+        $SUDO apt update -y && $SUDO apt upgrade -y
     fi
+) & spin
+success "System update complete."
+
+# -----------------------------
+# Step 2: Termux Storage Permission
+# -----------------------------
+if [ "$PLATFORM" = "termux" ]; then
+    print_step 2 "Requesting Termux storage permission..."
+    (termux-setup-storage) & spin
+    success "Storage permission granted."
 fi
 
-# Pick python executable
-if command -v python3.12 >/dev/null 2>&1; then
-    PY="python3.12"
-else
-    PY="python3"
-fi
+# -----------------------------
+# Step 3: Install Dependencies
+# -----------------------------
+print_step 3 "Installing required packages..."
+(
+    if [ "$PLATFORM" = "termux" ]; then
+        pkg install python git nano -y
+    else
+        $SUDO apt install -y python3 python3-pip git nano software-properties-common
+    fi
+) & spin
+success "All required packages installed."
 
-# Step 5: Navigate to project directory
+# -----------------------------
+# Step 4: Verify Python
+# -----------------------------
+print_step 4 "Checking Python installation..."
+$PYTHON_CMD -V >/dev/null 2>&1 || error_exit "Python not found!"
+success "Python detected: $($PYTHON_CMD -V 2>&1)"
+
+# -----------------------------
+# Step 5: Navigate to Project Directory
+# -----------------------------
+print_step 5 "Locating CVV-Checkers directory..."
 if [ -d "$HOME/CVV-checkers" ]; then
     cd "$HOME/CVV-checkers"
+    success "Directory found: $HOME/CVV-checkers"
 else
-    echo "Error: CVV-Checkers directory not found in HOME."
-    echo "Place this script inside or above the CVV-Checkers folder."
-    exit 1
+    error_exit "CVV-Checkers directory not found in HOME. Please clone it first."
 fi
 
-# Step 6: Install Python requirements
-echo "[6/8] Installing Python dependencies from stuff/requirements.txt..."
-if [ -f "stuff/requirements.txt" ]; then
-    $PY -m pip install --upgrade pip
-    $PY -m pip install -r requirements.txt
-else
-    echo "Error: requirements.txt not found!"
-    exit 1
-fi
+# -----------------------------
+# Step 6: Install Python Dependencies
+# -----------------------------
+print_step 6 "Installing Python dependencies..."
+(
+    if [ -f "stuff/requirements.txt" ]; then
+        $PYTHON_CMD -m pip install --upgrade pip
+        $PYTHON_CMD -m pip install -r requirements.txt
+    else
+        error_exit "requirements.txt not found in 'stuff/' directory!"
+    fi
+) & spin
+success "Python dependencies installed successfully."
 
-# Step 7: Fix permissions
-echo "[7/8] Setting directory permissions..."
-chmod -R 755 "$HOME/CVV-checkers"
+# -----------------------------
+# Step 7: Fix Permissions
+# -----------------------------
+print_step 7 "Setting directory permissions..."
+(chmod -R 755 "$HOME/CVV-checkers") & spin
+success "Permissions updated."
 
-# Step 8: Run main script with auto-restart
-echo "[8/8] Launching CVV-checkers..."
+# -----------------------------
+# Step 8: Launch Application
+# -----------------------------
+print_step 8 "Launching CVV-Checkers..."
 echo ""
-echo "=========================================="
-echo "   Starting auth.py (auto-restart)"
-echo "   Press CTRL + C to stop manually."
-echo "=========================================="
+echo "==============================================="
+echo "     Starting auth.py (auto-restart enabled)   "
+echo "     Press CTRL + C to stop manually.          "
+echo "==============================================="
 echo ""
+
+sleep 1
 
 while true; do
-    $PY "$HOME/CVV-checkers/auth.py"
+    $PYTHON_CMD "$HOME/CVV-checkers/auth.py"
     echo ""
-    echo ">>> auth.py stopped. Restarting in 5 seconds..."
+    echo "↻ auth.py stopped. Restarting in 5 seconds..."
     sleep 5
 done
