@@ -129,7 +129,7 @@ fi
 # -----------------------------
 print_step 6 "Installing Python dependencies..."
 (
-    if [ -f "stuff/requirements.txt" ]; then
+    if [ -f "requirements.txt" ]; then
         $PYTHON_CMD -m pip install --upgrade pip
         $PYTHON_CMD -m pip install -r requirements.txt
     else
