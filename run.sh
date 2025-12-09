@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # ==========================================================
-# Universal Runner / Installer
-# Clean • Modern • Realtime • Termux-safe
-# Repo : https://github.com/KianSantang777/CVV-Checkers
+# Universal Auto Installer & Runner
+# Termux / Linux / macOS
+# Auto install OS deps + pip deps → run auth.py
 # ==========================================================
 
 set -e
@@ -26,10 +26,10 @@ run() {
     "$@" >/dev/null 2>&1 &
     local pid=$!
 
-    local spin='|/-\'
+    local s='|/-\'
     local i=0
     while kill -0 "$pid" 2>/dev/null; do
-        printf "\r${CLR_DIM}• %s %c${CLR_RESET}" "$msg" "${spin:i++%4:1}"
+        printf "\r${CLR_DIM}• %s %c${CLR_RESET}" "$msg" "${s:i++%4:1}"
         sleep 0.1
     done
 
@@ -42,7 +42,7 @@ run() {
     fi
 }
 
-# ---------------- PLATFORM ----------------
+# ---------------- PLATFORM DETECT ----------------
 PLATFORM="linux"
 SUDO="sudo"
 
@@ -58,7 +58,7 @@ else
     step "Environment: Linux"
 fi
 
-# ---------------- UPDATE ----------------
+# ---------------- UPDATE SYSTEM ----------------
 if [ "$PLATFORM" = "termux" ]; then
     run "Updating system" pkg update -y
 elif [ "$PLATFORM" = "linux" ]; then
@@ -68,20 +68,20 @@ fi
 # ---------------- TERMUX STORAGE ----------------
 [ "$PLATFORM" = "termux" ] && run "Enabling storage access" termux-setup-storage
 
-# ---------------- BASE PACKAGES ----------------
+# ---------------- INSTALL OS PACKAGES ----------------
 if [ "$PLATFORM" = "termux" ]; then
-    run "Installing base tools" \
-        pkg install -y python clang libffi openssl nano curl wget unzip git
+    run "Installing OS packages" \
+        pkg install -y git nano curl wget unzip clang libffi openssl python
 elif [ "$PLATFORM" = "linux" ]; then
-    run "Installing base tools" \
-        $SUDO apt install -y python3 python3-pip nano curl wget unzip git
+    run "Installing OS packages" \
+        $SUDO apt install -y git nano curl wget unzip python3 python3-pip
 elif [ "$PLATFORM" = "macos" ]; then
-    command -v brew >/dev/null || fail "Homebrew not installed"
-    run "Installing base tools" \
-        brew install python nano curl wget unzip git
+    command -v brew >/dev/null || fail "Install Homebrew first"
+    run "Installing OS packages" \
+        brew install git nano curl wget unzip python
 fi
 
-# ---------------- PYTHON (TERMUX-SAFE) ----------------
+# ---------------- PYTHON ----------------
 if [ "$PLATFORM" = "termux" ]; then
     PYTHON=$(command -v python3.11 || command -v python3)
 else
@@ -91,7 +91,7 @@ fi
 [ -z "$PYTHON" ] && fail "Python not found"
 ok "Using $($PYTHON --version 2>&1)"
 
-# ---------------- PROJECT ----------------
+# ---------------- PROJECT SETUP ----------------
 PROJECT_DIR="$HOME/CVV-Checkers"
 REPO_URL="https://github.com/KianSantang777/CVV-Checkers"
 ZIP_URL="$REPO_URL/archive/refs/heads/main.zip"
@@ -103,7 +103,7 @@ if [ ! -d "$PROJECT_DIR" ]; then
     if command -v git >/dev/null; then
         run "Cloning repository" git clone "$REPO_URL" "$PROJECT_DIR"
     else
-        step "Git unavailable, using zip"
+        step "Git missing → using zip"
 
         if command -v curl >/dev/null; then
             run "Downloading source" curl -L "$ZIP_URL" -o "$TMP_ZIP"
@@ -114,7 +114,7 @@ if [ ! -d "$PROJECT_DIR" ]; then
         fi
 
         run "Extracting source" unzip -q "$TMP_ZIP" -d "$HOME"
-        mv "$HOME/CVV-Checkers-main" "$PROJECT_DIR" || fail "Move failed"
+        mv "$HOME/CVV-Checkers-main" "$PROJECT_DIR"
         rm -f "$TMP_ZIP"
     fi
 
@@ -125,21 +125,17 @@ fi
 
 cd "$PROJECT_DIR" || fail "Cannot enter project directory"
 
-# ---------------- PYTHON DEPS ----------------
+# ---------------- PIP SETUP ----------------
+run "Upgrading pip tools" $PYTHON -m pip install -U pip setuptools wheel
+
 [ ! -f requirements.txt ] && fail "requirements.txt missing"
 
-run "Upgrading pip" $PYTHON -m pip install -U pip setuptools wheel
-run "Installing dependencies" $PYTHON -m pip install -r requirements.txt
+run "Installing Python requirements" $PYTHON -m pip install -r requirements.txt
 
 # ---------------- PERMISSIONS ----------------
 chmod -R 755 "$PROJECT_DIR"
 ok "Permissions set"
 
-# ---------------- RUN ----------------
-printf "\n${CLR_DIM}→ Launching auth.py (auto-restart enabled)${CLR_RESET}\n"
-
-while true; do
-    $PYTHON auth.py
-    printf "${CLR_DIM}→ auth.py stopped, restarting in 5s${CLR_RESET}\n"
-    sleep 5
-done
+# ---------------- RUN APP ----------------
+printf "\n${CLR_DIM}→ Running auth.py${CLR_RESET}\n\n"
+exec $PYTHON auth.py
