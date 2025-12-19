@@ -18,7 +18,7 @@ spin() {
     while ps -p $pid > /dev/null 2>&1; do
         local temp=${spinstr#?}
         printf " [%c]  " "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
+        spinstr=$temp${spinstr%"$temp"}
         sleep $delay
         printf "\b\b\b\b\b\b"
     done
@@ -55,6 +55,7 @@ error_exit() {
 # -----------------------------
 
 print_header
+
 if [ -d "/data/data/com.termux" ]; then
     PLATFORM="termux"
     PYTHON_CMD="python"
@@ -99,7 +100,7 @@ fi
 print_step 3 "Installing required packages..."
 (
     if [ "$PLATFORM" = "termux" ]; then
-        pkg install python git nano -y
+        pkg install -y python git nano
     else
         $SUDO apt install -y python3 python3-pip git nano software-properties-common
     fi
@@ -117,9 +118,12 @@ success "Python detected: $($PYTHON_CMD -V 2>&1)"
 # Step 5: Navigate to Project Directory
 # -----------------------------
 print_step 5 "Locating CVV-Checkers directory..."
-if [ -d "$HOME/CVV-checkers" ]; then
-    cd "$HOME/CVV-checkers"
-    success "Directory found: $HOME/CVV-checkers"
+
+PROJECT_DIR="$HOME/CVV-checkers"
+
+if [ -d "$PROJECT_DIR" ]; then
+    cd "$PROJECT_DIR"
+    success "Directory found: $PROJECT_DIR"
 else
     error_exit "CVV-Checkers directory not found in HOME. Please clone it first."
 fi
@@ -133,34 +137,41 @@ print_step 6 "Installing Python dependencies..."
         $PYTHON_CMD -m pip install --upgrade pip
         $PYTHON_CMD -m pip install -r requirements.txt
     else
-        error_exit "requirements.txt not found in current directory!"
+        error_exit "requirements.txt not found!"
     fi
 ) & spin
-success "Python dependencies installed successfully."
+success "Python dependencies installed."
 
 # -----------------------------
 # Step 7: Fix Permissions
 # -----------------------------
 print_step 7 "Setting directory permissions..."
-(chmod -R 755 "$HOME/CVV-checkers") & spin
+(chmod -R 755 "$PROJECT_DIR") & spin
 success "Permissions updated."
 
 # -----------------------------
-# Step 8: Launch Application
+# Step 8: Launch Application (dist/adsjc.py)
 # -----------------------------
-print_step 8 "Launching CVV-Checkers..."
+print_step 8 "Launching CVV-Checkers (dist/adsjc.py)..."
+
+APP_PATH="$PROJECT_DIR/dist/adsjc.py"
+
+if [ ! -f "$APP_PATH" ]; then
+    error_exit "File not found: $APP_PATH"
+fi
+
 echo ""
 echo "==============================================="
-echo "     Starting auth.py (auto-restart enabled)   "
-echo "     Press CTRL + C to stop manually.          "
+echo "   Starting dist/adsjc.py (auto-restart ON)    "
+echo "   Press CTRL + C to stop manually             "
 echo "==============================================="
 echo ""
 
 sleep 1
 
 while true; do
-    $PYTHON_CMD "$HOME/CVV-checkers/auth.py"
+    $PYTHON_CMD "$APP_PATH"
     echo ""
-    echo "↻ auth.py stopped. Restarting in 5 seconds..."
+    echo "↻ adsjc.py stopped. Restarting in 5 seconds..."
     sleep 5
 done
