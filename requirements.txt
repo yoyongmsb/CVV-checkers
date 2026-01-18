@@ -16,7 +16,6 @@ faker
 aiohttp
 pyfiglet
 colorama
-pyfiglet
 tqdm
 psutil
 asyncio
@@ -28,4 +27,3 @@ fake-useragent
 Faker
 getuseragent
 pycryptodome
-
