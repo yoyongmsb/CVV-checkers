@@ -150,11 +150,11 @@ print_step 7 "Setting directory permissions..."
 success "Permissions updated."
 
 # -----------------------------
-# Step 8: Launch Application (dist/adsjc.py)
+# Step 8: Launch Application (run.py)
 # -----------------------------
-print_step 8 "Launching CVV-Checkers (dist/adsjc.py)..."
+print_step 8 "Launching CVV-Checkers (run.py)..."
 
-APP_PATH="$PROJECT_DIR/dist/adsjc.py"
+APP_PATH="$PROJECT_DIR/run.py"
 
 if [ ! -f "$APP_PATH" ]; then
     error_exit "File not found: $APP_PATH"
@@ -162,7 +162,7 @@ fi
 
 echo ""
 echo "==============================================="
-echo "   Starting dist/adsjc.py (auto-restart ON)    "
+echo "   Starting run.py (auto-restart ON)    "
 echo "   Press CTRL + C to stop manually             "
 echo "==============================================="
 echo ""
@@ -172,6 +172,6 @@ sleep 1
 while true; do
     $PYTHON_CMD "$APP_PATH"
     echo ""
-    echo "↻ adsjc.py stopped. Restarting in 5 seconds..."
+    echo "↻ run.py stopped. Restarting in 5 seconds..."
     sleep 5
 done
